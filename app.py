@@ -113,8 +113,17 @@ def get_postprocessor_hook(download_id):
     return hook
 
 
+COOKIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
+
+def get_cookies_opts():
+    """Use cookies.txt if present to bypass bot detection on cloud servers."""
+    if os.path.exists(COOKIES_FILE):
+        return {'cookiefile': COOKIES_FILE}
+    return {}
+
 def build_download_options(download_id, fmt, ext):
     outtmpl = os.path.join(TEMP_FOLDER, f'{download_id}.%(ext)s')
+    cookies = get_cookies_opts()
 
     if ext == 'mp3':
         return {
@@ -129,6 +138,7 @@ def build_download_options(download_id, fmt, ext):
             'postprocessor_hooks': [get_postprocessor_hook(download_id)],
             'quiet': True,
             'no_warnings': True,
+            **cookies,
         }
 
     if ext == 'm4a':
@@ -139,16 +149,21 @@ def build_download_options(download_id, fmt, ext):
             'postprocessor_hooks': [get_postprocessor_hook(download_id)],
             'quiet': True,
             'no_warnings': True,
+            **cookies,
         }
 
     return {
         'format': fmt if fmt else 'bestvideo+bestaudio/best',
         'outtmpl': outtmpl,
         'merge_output_format': 'mp4',
+        'postprocessor_args': {
+            'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']
+        },
         'progress_hooks': [get_progress_hook(download_id)],
         'postprocessor_hooks': [get_postprocessor_hook(download_id)],
         'quiet': True,
         'no_warnings': True,
+        **cookies,
     }
 
 
@@ -187,6 +202,7 @@ def get_info():
         'quiet': True,
         'no_warnings': True,
         'skip_download': True,
+        **get_cookies_opts(),
     }
 
     try:
