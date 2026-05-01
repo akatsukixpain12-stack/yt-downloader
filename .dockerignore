@@ -1,0 +1,10 @@
+.venv
+__pycache__
+*.pyc
+downloads_temp
+*.mp4
+*.mp3
+*.m4a
+*.webm
+.git
+.github

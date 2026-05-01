@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YTSave | Universal Video Downloader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #08111f;
+      --bg-soft: #0e1930;
+      --panel: rgba(10, 18, 35, 0.78);
+      --panel-strong: rgba(13, 24, 46, 0.94);
+      --line: rgba(151, 182, 255, 0.16);
+      --text: #edf3ff;
+      --muted: #8ea0bf;
+      --accent: #ff6b35;
+      --accent-2: #00d4ff;
+      --good: #74f0a7;
+      --warn: #ffd166;
+      --danger: #ff8080;
+      --shadow: 0 28px 90px rgba(0, 0, 0, 0.38);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 18%, rgba(0, 212, 255, 0.16), transparent 26%),
+        radial-gradient(circle at 88% 8%, rgba(255, 107, 53, 0.18), transparent 24%),
+        linear-gradient(180deg, #07101c 0%, #091426 52%, #06101b 100%);
+      min-height: 100vh;
+    }
+
+    .shell {
+      width: min(1160px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), #ff935c);
+      box-shadow: 0 14px 30px rgba(255, 107, 53, 0.28);
+      font-weight: 700;
+      color: #150c07;
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-size: 1.05rem;
+    }
+
+    .brand-copy span {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .status-pill {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(116, 240, 167, 0.25);
+      background: rgba(116, 240, 167, 0.08);
+      color: var(--good);
+      font-size: 0.9rem;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 22px;
+      margin-bottom: 22px;
+    }
+
+    .hero-card,
+    .panel {
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-card {
+      padding: 32px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-card::before {
+      content: "";
+      position: absolute;
+      inset: auto -10% -35% 45%;
+      height: 240px;
+      background: radial-gradient(circle, rgba(255, 107, 53, 0.22), transparent 60%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      padding: 8px 12px;
+      color: var(--accent-2);
+      background: rgba(0, 212, 255, 0.08);
+      font-size: 0.88rem;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font: 400 clamp(2.6rem, 6vw, 4.7rem)/0.92 "Instrument Serif", serif;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-copy {
+      max-width: 62ch;
+      color: var(--muted);
+      line-height: 1.65;
+      margin-bottom: 24px;
+    }
+
+    .search {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .search input,
+    .download-bar button,
+    .download-bar select {
+      font: inherit;
+    }
+
+    .search input,
+    .download-bar select {
+      width: 100%;
+      border: 1px solid rgba(151, 182, 255, 0.14);
+      background: rgba(6, 12, 22, 0.82);
+      color: var(--text);
+      border-radius: 18px;
+      padding: 16px 18px;
+      outline: none;
+    }
+
+    .search input::placeholder {
+      color: #6f84ab;
+    }
+
+    .button-primary,
+    .button-secondary {
+      border: 0;
+      border-radius: 18px;
+      padding: 16px 22px;
+      cursor: pointer;
+      transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+      font-weight: 700;
+    }
+
+    .button-primary {
+      background: linear-gradient(135deg, var(--accent), #ff935c);
+      color: #160c07;
+      box-shadow: 0 18px 34px rgba(255, 107, 53, 0.24);
+    }
+
+    .button-secondary {
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.18), rgba(0, 212, 255, 0.1));
+      color: var(--text);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .hero-stat {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(151, 182, 255, 0.1);
+    }
+
+    .hero-stat strong {
+      display: block;
+      font-size: 1.05rem;
+      margin-bottom: 4px;
+    }
+
+    .hero-stat span {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .insight {
+      padding: 24px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .insight h2,
+    .section-title {
+      margin: 0;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
+
+    .insight-card {
+      padding: 16px 18px;
+      border-radius: 20px;
+      background: var(--panel-strong);
+      border: 1px solid rgba(151, 182, 255, 0.12);
+    }
+
+    .insight-card strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .insight-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 0.93rem;
+    }
+
+    .message {
+      display: none;
+      margin: 0 0 20px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      line-height: 1.5;
+    }
+
+    .message.visible { display: block; }
+    .message.error {
+      background: rgba(255, 128, 128, 0.1);
+      border: 1px solid rgba(255, 128, 128, 0.22);
+      color: var(--danger);
+    }
+    .message.success {
+      background: rgba(116, 240, 167, 0.1);
+      border: 1px solid rgba(116, 240, 167, 0.2);
+      color: var(--good);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 22px;
+    }
+
+    .panel {
+      padding: 24px;
+    }
+
+    .preview {
+      display: grid;
+      gap: 18px;
+    }
+
+    .thumb {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(151, 182, 255, 0.12);
+    }
+
+    .meta-headline {
+      margin: 0;
+      font-size: 1.45rem;
+      line-height: 1.25;
+    }
+
+    .meta-sub {
+      color: var(--muted);
+      line-height: 1.6;
+      margin: 8px 0 0;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .meta-box {
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(151, 182, 255, 0.1);
+    }
+
+    .meta-box span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .meta-box strong {
+      font-size: 1rem;
+    }
+
+    .formats {
+      display: grid;
+      gap: 14px;
+      max-height: 620px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .format-card {
+      padding: 16px 18px;
+      border-radius: 20px;
+      border: 1px solid rgba(151, 182, 255, 0.12);
+      background: rgba(255, 255, 255, 0.03);
+      cursor: pointer;
+      transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+    }
+
+    .format-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 107, 53, 0.35);
+      background: rgba(255, 107, 53, 0.06);
+    }
+
+    .format-card.selected {
+      border-color: rgba(0, 212, 255, 0.44);
+      background: rgba(0, 212, 255, 0.08);
+    }
+
+    .format-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .format-type,
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      border: 1px solid rgba(151, 182, 255, 0.14);
+    }
+
+    .format-type.video { color: var(--accent-2); }
+    .format-type.audio { color: var(--warn); }
+    .chip.good {
+      color: var(--good);
+      border-color: rgba(116, 240, 167, 0.2);
+      background: rgba(116, 240, 167, 0.08);
+    }
+    .chip.warn {
+      color: var(--warn);
+      border-color: rgba(255, 209, 102, 0.2);
+      background: rgba(255, 209, 102, 0.08);
+    }
+
+    .format-quality {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .format-meta,
+    .format-note {
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    .download-bar {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .download-status {
+      margin-top: 18px;
+      display: none;
+      gap: 10px;
+    }
+
+    .download-status.visible {
+      display: grid;
+    }
+
+    .progress-shell {
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(151, 182, 255, 0.12);
+      padding: 14px 16px;
+    }
+
+    .progress-shell strong {
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    .bar {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.3s ease;
+    }
+
+    .progress-copy {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .feature {
+      padding: 18px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(151, 182, 255, 0.1);
+    }
+
+    .feature strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .feature p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 0.92rem;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 980px) {
+      .hero,
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .features {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100% - 20px, 100%);
+        padding-top: 18px;
+      }
+
+      .topbar,
+      .format-top,
+      .progress-copy {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .search,
+      .download-bar,
+      .hero-grid,
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-card,
+      .panel,
+      .insight {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">YS</div>
+        <div class="brand-copy">
+          <strong>YTSave</strong>
+          <span>Universal video downloader tuned for reliable playback</span>
+        </div>
+      </div>
+      <div class="status-pill">Universal MP4 audio fix active</div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-card">
+        <div class="eyebrow">Direct download engine with stronger format compatibility</div>
+        <h1>Download once.<br>Play everywhere.</h1>
+        <p class="hero-copy">
+          This build prefers MP4 video with AAC-compatible audio when the source provides it, which avoids the common "Opus audio isn't supported" playback failure on browsers and phones.
+        </p>
+        <div class="search">
+          <input id="urlInput" type="text" placeholder="Paste YouTube, Instagram, TikTok, Vimeo, X or other supported URL">
+          <button id="fetchBtn" class="button-primary" type="button">Analyze video</button>
+        </div>
+        <div class="hero-grid">
+          <div class="hero-stat">
+            <strong>Universal MP4</strong>
+            <span>Prefers AAC/M4A audio for browser-safe playback</span>
+          </div>
+          <div class="hero-stat">
+            <strong>Audio choices</strong>
+            <span>MP3 and M4A export modes included</span>
+          </div>
+          <div class="hero-stat">
+            <strong>Fast delivery</strong>
+            <span>Server streams the generated file to your device</span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="panel insight">
+        <h2>What changed</h2>
+        <div class="insight-card">
+          <strong>Codec-aware format list</strong>
+          <p>Video formats now surface compatibility labels, so the safest MP4 options are obvious instead of buried.</p>
+        </div>
+        <div class="insight-card">
+          <strong>Reliable download ID flow</strong>
+          <p>The UI now uses the server's real download ID. Progress polling and final file delivery stay aligned.</p>
+        </div>
+        <div class="insight-card">
+          <strong>More capable interface</strong>
+          <p>The app shows platform, views, duration, output notes, status messages, and stronger defaults.</p>
+        </div>
+      </aside>
+    </section>
+
+    <div id="errorBox" class="message error"></div>
+    <div id="successBox" class="message success"></div>
+
+    <section id="workspace" class="workspace hidden">
+      <article class="panel preview">
+        <img id="thumb" class="thumb" alt="Video thumbnail">
+        <div>
+          <h2 id="vidTitle" class="meta-headline">Title</h2>
+          <p id="vidChannel" class="meta-sub">Channel</p>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-box">
+            <span>Platform</span>
+            <strong id="vidPlatform">-</strong>
+          </div>
+          <div class="meta-box">
+            <span>Duration</span>
+            <strong id="vidDuration">-</strong>
+          </div>
+          <div class="meta-box">
+            <span>Views</span>
+            <strong id="vidViews">-</strong>
+          </div>
+          <div class="meta-box">
+            <span>Recommended audio</span>
+            <strong id="vidAudioCodec">-</strong>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2 class="section-title">Formats</h2>
+        <div id="formatsGrid" class="formats"></div>
+        <div class="download-bar">
+          <button id="downloadBtn" class="button-primary" type="button">Download selected format</button>
+          <button id="saveBtn" class="button-secondary hidden" type="button">Save completed file</button>
+        </div>
+        <div id="progressWrap" class="download-status">
+          <div class="progress-shell">
+            <strong id="progressTitle">Preparing download...</strong>
+            <div class="bar"><span id="progressBar"></span></div>
+            <div class="progress-copy">
+              <span id="progressMeta">Waiting for server</span>
+              <span id="progressPct">0%</span>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="features">
+      <div class="feature">
+        <strong>Smart compatibility</strong>
+        <p>Universal MP4 options are promoted first, which reduces playback issues on Chrome, Android, iPhone, and built-in media viewers.</p>
+      </div>
+      <div class="feature">
+        <strong>Multiple output types</strong>
+        <p>Video downloads stay in MP4, while audio can be exported as MP3 or M4A depending on what works best for the target device.</p>
+      </div>
+      <div class="feature">
+        <strong>Cleaner status flow</strong>
+        <p>The app distinguishes analyze, download, processing, and final save states so failures are visible and recoverable.</p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    let currentUrl = '';
+    let selectedFormat = null;
+    let activeDownloadId = null;
+    let activeFilename = '';
+    let pollTimer = null;
+
+    const urlInput = document.getElementById('urlInput');
+    const fetchBtn = document.getElementById('fetchBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const workspace = document.getElementById('workspace');
+    const errorBox = document.getElementById('errorBox');
+    const successBox = document.getElementById('successBox');
+    const progressWrap = document.getElementById('progressWrap');
+
+    fetchBtn.addEventListener('click', fetchInfo);
+    downloadBtn.addEventListener('click', startDownload);
+    saveBtn.addEventListener('click', saveCompletedFile);
+    urlInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') fetchInfo();
+    });
+
+    function showMessage(target, message) {
+      target.textContent = message;
+      target.classList.add('visible');
+    }
+
+    function hideMessages() {
+      errorBox.classList.remove('visible');
+      successBox.classList.remove('visible');
+    }
+
+    function resetProgress() {
+      progressWrap.classList.remove('visible');
+      document.getElementById('progressTitle').textContent = 'Preparing download...';
+      document.getElementById('progressBar').style.width = '0%';
+      document.getElementById('progressMeta').textContent = 'Waiting for server';
+      document.getElementById('progressPct').textContent = '0%';
+      saveBtn.classList.add('hidden');
+      activeDownloadId = null;
+      activeFilename = '';
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    async function fetchInfo() {
+      const url = urlInput.value.trim();
+      if (!url) {
+        showMessage(errorBox, 'Paste a video URL first.');
+        return;
+      }
+
+      currentUrl = url;
+      hideMessages();
+      resetProgress();
+      fetchBtn.disabled = true;
+      fetchBtn.textContent = 'Analyzing...';
+
+      try {
+        const response = await fetch('/info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          throw new Error(data.error || 'Could not analyze this URL.');
+        }
+
+        renderInfo(data);
+        showMessage(
+          successBox,
+          data.supports_universal_mp4
+            ? 'Universal MP4 is available. That option avoids the Opus audio playback problem.'
+            : 'Using the best available source formats. Some sources may not provide a fully universal MP4 stream.'
+        );
+      } catch (error) {
+        workspace.classList.add('hidden');
+        showMessage(errorBox, error.message);
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.textContent = 'Analyze video';
+      }
+    }
+
+    function renderInfo(data) {
+      document.getElementById('thumb').src = data.thumbnail || '';
+      document.getElementById('vidTitle').textContent = data.title || 'Unknown title';
+      document.getElementById('vidChannel').textContent = data.channel || 'Unknown creator';
+      document.getElementById('vidPlatform').textContent = data.platform || 'Unknown';
+      document.getElementById('vidDuration').textContent = data.duration || '-';
+      document.getElementById('vidViews').textContent = data.views || '-';
+      document.getElementById('vidAudioCodec').textContent = data.best_audio_codec || 'Unknown';
+
+      buildFormats(data.formats || []);
+      workspace.classList.remove('hidden');
+      workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function buildFormats(formats) {
+      const grid = document.getElementById('formatsGrid');
+      grid.innerHTML = '';
+      selectedFormat = formats[0] || null;
+
+      formats.forEach((format, index) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'format-card' + (index === 0 ? ' selected' : '');
+
+        const chipClass = (format.compatibility || '').toLowerCase().includes('universal') ? 'good' : 'warn';
+        const codecLine = format.type === 'video'
+          ? `${format.size} · .${format.ext} · ${format.codec || 'video'} / ${format.audio_codec || 'audio'}`
+          : `${format.size} · .${format.ext}`;
+
+        card.innerHTML = `
+          <div class="format-top">
+            <span class="format-type ${format.type}">${format.type.toUpperCase()}</span>
+            <span class="chip ${chipClass}">${format.compatibility || 'Available'}</span>
+          </div>
+          <div class="format-quality">${format.quality}</div>
+          <div class="format-meta">${codecLine}</div>
+          <div class="format-note">${format.note || ''}</div>
+        `;
+
+        card.addEventListener('click', () => {
+          selectedFormat = format;
+          document.querySelectorAll('.format-card').forEach((item, i) => {
+            item.classList.toggle('selected', i === index);
+          });
+        });
+
+        grid.appendChild(card);
+      });
+
+      downloadBtn.disabled = !selectedFormat;
+    }
+
+    async function startDownload() {
+      if (!selectedFormat || !currentUrl) {
+        showMessage(errorBox, 'Analyze a video and choose a format first.');
+        return;
+      }
+
+      hideMessages();
+      resetProgress();
+      downloadBtn.disabled = true;
+      progressWrap.classList.add('visible');
+      document.getElementById('progressTitle').textContent = `Starting ${selectedFormat.quality} download...`;
+      document.getElementById('progressMeta').textContent = 'Request accepted';
+
+      try {
+        const response = await fetch('/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: currentUrl,
+            format_id: selectedFormat.format_id,
+            ext: selectedFormat.ext,
+            quality: selectedFormat.quality
+          })
+        });
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          throw new Error(data.error || 'Failed to start download.');
+        }
+
+        activeDownloadId = data.download_id;
+        pollProgress(activeDownloadId);
+      } catch (error) {
+        downloadBtn.disabled = false;
+        progressWrap.classList.remove('visible');
+        showMessage(errorBox, error.message);
+      }
+    }
+
+    function pollProgress(downloadId) {
+      if (pollTimer) clearInterval(pollTimer);
+
+      pollTimer = setInterval(async () => {
+        try {
+          const response = await fetch(`/progress/${downloadId}`);
+          const data = await response.json();
+
+          if (data.status === 'downloading') {
+            updateProgress(
+              data.percent || 0,
+              'Downloading...',
+              `${data.speed || 'Working'}${data.eta ? ` · ETA ${data.eta}` : ''}${data.total_mb ? ` · ${data.downloaded_mb}/${data.total_mb} MB` : ''}`
+            );
+            return;
+          }
+
+          if (data.status === 'processing') {
+            updateProgress(99, 'Finalizing file...', 'Merging streams and preparing download');
+            return;
+          }
+
+          if (data.status === 'finished') {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            activeFilename = data.filename || `download.${selectedFormat.ext}`;
+            updateProgress(100, 'Download ready', 'The file is prepared. Save it to your device.');
+            saveBtn.classList.remove('hidden');
+            downloadBtn.disabled = false;
+            showMessage(successBox, 'Download complete. Use "Save completed file" to fetch the final file.');
+            return;
+          }
+
+          if (data.status === 'error') {
+            throw new Error(data.error || 'Download failed.');
+          }
+        } catch (error) {
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
+          downloadBtn.disabled = false;
+          showMessage(errorBox, error.message);
+        }
+      }, 700);
+    }
+
+    function updateProgress(percent, title, meta) {
+      document.getElementById('progressTitle').textContent = title;
+      document.getElementById('progressBar').style.width = `${percent}%`;
+      document.getElementById('progressMeta').textContent = meta;
+      document.getElementById('progressPct').textContent = `${Math.round(percent)}%`;
+    }
+
+    function saveCompletedFile() {
+      if (!activeDownloadId) {
+        showMessage(errorBox, 'No completed download is ready yet.');
+        return;
+      }
+
+      const link = document.createElement('a');
+      link.href = `/file/${activeDownloadId}`;
+      link.download = activeFilename || `download.${selectedFormat.ext}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+  </script>
+</body>
+</html>
