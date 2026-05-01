@@ -104,8 +104,14 @@ def build_ydl_opts(download_id, fmt, ext):
             'outtmpl': outtmpl,
             **hooks, **cookies
         }
+    # Build a safe format string with fallbacks
+    if fmt and fmt not in ('bestvideo+bestaudio/best', 'best'):
+        safe_fmt = f'{fmt}/bestvideo+bestaudio/best/best'
+    else:
+        safe_fmt = 'bestvideo+bestaudio/best/best'
+
     return {
-        'format': fmt if fmt else 'bestvideo+bestaudio/best',
+        'format': safe_fmt,
         'outtmpl': outtmpl,
         'merge_output_format': 'mp4',
         'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
@@ -183,12 +189,12 @@ def get_info():
             size = f.get('filesize') or f.get('filesize_approx')
             acodec = f.get('acodec', 'none')
 
-            # Pick audio to merge
+            # Build format string with fallback so it never fails
             audio = best_aac or best_audio
             if acodec in (None, 'none') and audio:
-                fmt_id = f"{f['format_id']}+{audio['format_id']}"
+                fmt_id = f"{f['format_id']}+{audio['format_id']}/bestvideo[height<={height}]+bestaudio/best"
             else:
-                fmt_id = f['format_id']
+                fmt_id = f"{f['format_id']}/bestvideo[height<={height}]+bestaudio/best"
 
             formats.append({
                 'format_id': fmt_id,
