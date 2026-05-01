@@ -81,7 +81,8 @@ def get_postprocessor_hook(download_id):
     return hook
 
 
-def build_ydl_opts(download_id, fmt, ext):
+def build_ydl_opts(download_id, height, ext):
+    """Build download options using height-based format selection — never fails."""
     outtmpl = os.path.join(TEMP_FOLDER, f'{download_id}.%(ext)s')
     cookies = get_cookies_opts()
     hooks = {
@@ -98,20 +99,30 @@ def build_ydl_opts(download_id, fmt, ext):
             'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
             **hooks, **cookies
         }
+
     if ext == 'm4a':
         return {
             'format': 'bestaudio[ext=m4a]/bestaudio/best',
             'outtmpl': outtmpl,
             **hooks, **cookies
         }
-    # Build a safe format string with fallbacks
-    if fmt and fmt not in ('bestvideo+bestaudio/best', 'best'):
-        safe_fmt = f'{fmt}/bestvideo+bestaudio/best/best'
+
+    # Video: use height-based format string with multiple fallbacks
+    if height and int(height) > 0:
+        h = int(height)
+        fmt = (
+            f'bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/'
+            f'bestvideo[height<={h}][ext=mp4]+bestaudio/'
+            f'bestvideo[height<={h}]+bestaudio/'
+            f'best[height<={h}]/'
+            f'bestvideo+bestaudio/'
+            f'best'
+        )
     else:
-        safe_fmt = 'bestvideo+bestaudio/best/best'
+        fmt = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
 
     return {
-        'format': safe_fmt,
+        'format': fmt,
         'outtmpl': outtmpl,
         'merge_output_format': 'mp4',
         'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
@@ -152,25 +163,15 @@ def get_info():
         return jsonify({'error': 'No URL provided'}), 400
 
     try:
-        with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'skip_download': True, **get_cookies_opts()}) as ydl:
+        with yt_dlp.YoutubeDL({
+            'quiet': True, 'no_warnings': True,
+            'skip_download': True, **get_cookies_opts()
+        }) as ydl:
             info = ydl.extract_info(url, download=False)
 
         all_formats = info.get('formats', [])
 
-        # Find best audio streams
-        best_audio = None
-        best_aac = None
-        for f in all_formats:
-            if f.get('vcodec') == 'none' and f.get('acodec') not in (None, 'none'):
-                abr = f.get('abr') or 0
-                if best_audio is None or abr > (best_audio.get('abr') or 0):
-                    best_audio = f
-                acodec = (f.get('acodec') or '').lower()
-                if 'mp4a' in acodec or 'aac' in acodec:
-                    if best_aac is None or abr > (best_aac.get('abr') or 0):
-                        best_aac = f
-
-        # Collect all video formats, deduplicated by height
+        # Collect all unique heights with video
         seen = set()
         video_formats = []
         for f in all_formats:
@@ -187,26 +188,16 @@ def get_info():
         for f in video_formats:
             height = f.get('height')
             size = f.get('filesize') or f.get('filesize_approx')
-            acodec = f.get('acodec', 'none')
-
-            # Build format string with fallback so it never fails
-            audio = best_aac or best_audio
-            if acodec in (None, 'none') and audio:
-                fmt_id = f"{f['format_id']}+{audio['format_id']}/bestvideo[height<={height}]+bestaudio/best"
-            else:
-                fmt_id = f"{f['format_id']}/bestvideo[height<={height}]+bestaudio/best"
-
             formats.append({
-                'format_id': fmt_id,
+                'height': height,
                 'type': 'video',
                 'quality': quality_label(height),
-                'height': height,
                 'ext': 'mp4',
                 'size': format_size(size),
             })
 
-        formats.append({'format_id': 'bestaudio/best', 'type': 'audio', 'quality': 'MP3 192k', 'ext': 'mp3', 'size': '~5-10 MB'})
-        formats.append({'format_id': 'bestaudio/best', 'type': 'audio', 'quality': 'M4A AAC', 'ext': 'm4a', 'size': '~5-10 MB'})
+        formats.append({'height': 0, 'type': 'audio', 'quality': 'MP3 192k', 'ext': 'mp3', 'size': '~5-10 MB'})
+        formats.append({'height': 0, 'type': 'audio', 'quality': 'M4A AAC', 'ext': 'm4a', 'size': '~5-10 MB'})
 
         duration_s = int(info.get('duration', 0) or 0)
         duration_str = f'{duration_s // 60}:{duration_s % 60:02d}' if duration_s else 'Unknown'
@@ -239,7 +230,7 @@ def get_info():
 def download():
     data = request.get_json()
     url = data.get('url', '').strip()
-    fmt = data.get('format_id', 'bestvideo+bestaudio/best')
+    height = data.get('height', 0)
     ext = data.get('ext', 'mp4')
     quality = data.get('quality', '')
     download_id = str(uuid.uuid4())
@@ -248,12 +239,12 @@ def download():
         return jsonify({'error': 'No URL provided'}), 400
 
     progress_data[download_id] = {
-        'status': 'starting', 'percent': 0, 'speed': '', 'eta': 'Starting...',
-        'downloaded_mb': 0, 'total_mb': 0, 'filename': '',
-        'quality': quality, 'ext': ext, 'filepath': ''
+        'status': 'starting', 'percent': 0, 'speed': '',
+        'eta': 'Starting...', 'downloaded_mb': 0, 'total_mb': 0,
+        'filename': '', 'quality': quality, 'ext': ext, 'filepath': ''
     }
 
-    ydl_opts = build_ydl_opts(download_id, fmt, ext)
+    ydl_opts = build_ydl_opts(download_id, height, ext)
 
     def run():
         try:
@@ -263,14 +254,16 @@ def download():
                 if os.path.exists(filepath):
                     progress_data[download_id].update({
                         'status': 'finished', 'percent': 100,
-                        'filepath': filepath, 'filename': os.path.basename(filepath)
+                        'filepath': filepath,
+                        'filename': os.path.basename(filepath)
                     })
                 elif progress_data[download_id].get('status') not in ('finished', 'error'):
                     files = glob.glob(os.path.join(TEMP_FOLDER, f'{download_id}.*'))
                     if files:
                         progress_data[download_id].update({
                             'status': 'finished', 'percent': 100,
-                            'filepath': files[0], 'filename': os.path.basename(files[0])
+                            'filepath': files[0],
+                            'filename': os.path.basename(files[0])
                         })
                     else:
                         progress_data[download_id].update({'status': 'error', 'error': 'File not found.'})
