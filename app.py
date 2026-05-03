@@ -1,3 +1,4 @@
+import base64
 import glob
 import os
 import tempfile
@@ -25,14 +26,90 @@ TEMP_FOLDER = os.path.join(tempfile.gettempdir(), "ytsave")
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
 COOKIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
+RUNTIME_COOKIES_FILE = os.path.join(TEMP_FOLDER, 'cookies.runtime.txt')
 
 progress_data = {}
 
 
-def get_cookies_opts():
+def _write_runtime_cookies_file(content):
+    with open(RUNTIME_COOKIES_FILE, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(content.strip() + '\n')
+    return RUNTIME_COOKIES_FILE
+
+
+def get_cookiefile_path():
+    cookies_b64 = os.environ.get('YTSAVE_YOUTUBE_COOKIES_B64', '').strip()
+    if cookies_b64:
+        try:
+            decoded = base64.b64decode(cookies_b64).decode('utf-8')
+            return _write_runtime_cookies_file(decoded)
+        except Exception as e:
+            print(f'Invalid YTSAVE_YOUTUBE_COOKIES_B64: {e}')
+
+    cookies_text = os.environ.get('YTSAVE_YOUTUBE_COOKIES', '')
+    if cookies_text.strip():
+        return _write_runtime_cookies_file(cookies_text)
+
     if os.path.exists(COOKIES_FILE):
-        return {'cookiefile': COOKIES_FILE}
-    return {}
+        return COOKIES_FILE
+
+    return ''
+
+
+def get_youtube_extractor_args():
+    youtube_args = {}
+    youtubetab_args = {}
+
+    player_clients = [x.strip() for x in os.environ.get('YTSAVE_YT_PLAYER_CLIENT', '').split(',') if x.strip()]
+    po_tokens = [x.strip() for x in os.environ.get('YTSAVE_YT_PO_TOKEN', '').split(',') if x.strip()]
+    visitor_data = os.environ.get('YTSAVE_YT_VISITOR_DATA', '').strip()
+    player_skip = os.environ.get('YTSAVE_YT_PLAYER_SKIP', '').strip()
+    tab_skip = os.environ.get('YTSAVE_YT_TAB_SKIP', '').strip()
+
+    if player_clients:
+        youtube_args['player_client'] = player_clients
+    if po_tokens:
+        youtube_args['po_token'] = po_tokens
+    if visitor_data:
+        youtube_args['visitor_data'] = [visitor_data]
+    if player_skip:
+        youtube_args['player_skip'] = [player_skip]
+    if tab_skip:
+        youtubetab_args['skip'] = [tab_skip]
+
+    extractor_args = {}
+    if youtube_args:
+        extractor_args['youtube'] = youtube_args
+    if youtubetab_args:
+        extractor_args['youtubetab'] = youtubetab_args
+    return extractor_args
+
+
+def get_auth_opts():
+    opts = {}
+    cookiefile = get_cookiefile_path()
+    if cookiefile:
+        opts['cookiefile'] = cookiefile
+
+    extractor_args = get_youtube_extractor_args()
+    if extractor_args:
+        opts['extractor_args'] = extractor_args
+
+    return opts
+
+
+def get_cookies_opts():
+    return get_auth_opts()
+
+
+def user_facing_error(message):
+    msg = str(message)
+    if "Sign in to confirm you're not a bot" in msg:
+        return (
+            "YouTube blocked this server session. Refresh your YouTube cookies, or configure a PO token/client "
+            "for this Render service. Public cloud IPs get challenged often."
+        )
+    return msg
 
 
 def quality_label(height):
@@ -166,6 +243,7 @@ def build_ydl_opts(download_id, height, ext):
         'postprocessor_hooks': [get_postprocessor_hook(download_id)],
         'quiet': True,
         'no_warnings': True,
+        'noplaylist': True,
     }
 
     if ext == 'mp3':
@@ -202,6 +280,7 @@ def build_fallback_ydl_opts(download_id, ext):
         'postprocessor_hooks': [get_postprocessor_hook(download_id)],
         'quiet': True,
         'no_warnings': True,
+        'noplaylist': True,
     }
 
     if ext == 'mp3':
@@ -237,6 +316,7 @@ def build_video_ydl_opts(download_id, format_string):
         'postprocessor_hooks': [get_postprocessor_hook(download_id)],
         'quiet': True,
         'no_warnings': True,
+        'noplaylist': True,
     }
     return {
         'format': format_string,
@@ -301,7 +381,9 @@ def get_info():
     try:
         with yt_dlp.YoutubeDL({
             'quiet': True, 'no_warnings': True,
-            'skip_download': True, **get_cookies_opts()
+            'skip_download': True,
+            'noplaylist': True,
+            **get_cookies_opts()
         }) as ydl:
             info = ydl.extract_info(url, download=False)
 
@@ -359,7 +441,7 @@ def get_info():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        return jsonify({'error': user_facing_error(e)}), 400
 
 
 @app.route('/download', methods=['POST'])
@@ -390,6 +472,7 @@ def download():
                     'quiet': True,
                     'no_warnings': True,
                     'skip_download': True,
+                    'noplaylist': True,
                     **get_cookies_opts()
                 }) as ydl:
                     info = ydl.extract_info(url, download=False)
@@ -427,7 +510,7 @@ def download():
                 })
         except Exception as e:
             progress_data[download_id].update({
-                'status': 'error', 'percent': 0, 'error': str(e)
+                'status': 'error', 'percent': 0, 'error': user_facing_error(e)
             })
 
     threading.Thread(target=run, daemon=True).start()

@@ -73,3 +73,25 @@ This repo now includes:
 4. Push to `main`
 
 After that, every push to `main` builds and deploys the service automatically.
+
+## YouTube auth on hosted servers
+
+YouTube bot checks are the main failure mode for public hosted downloaders. `yt-dlp` is still the best maintained option, but a cloud host often needs fresh cookies and sometimes PO-token settings.
+
+Recommended setup for hosted deployments:
+
+- Store cookies in a secret instead of committing `cookies.txt`
+- Export YouTube cookies from a private/incognito browser session
+- Refresh cookies when YouTube starts rejecting requests again
+
+Supported environment variables:
+
+- `YTSAVE_YOUTUBE_COOKIES_B64`: base64-encoded Netscape `cookies.txt` content
+- `YTSAVE_YOUTUBE_COOKIES`: raw Netscape `cookies.txt` content
+- `YTSAVE_YT_PLAYER_CLIENT`: optional comma-separated clients like `mweb` or `web`
+- `YTSAVE_YT_PO_TOKEN`: optional comma-separated PO tokens like `mweb.gvs+TOKEN_VALUE`
+- `YTSAVE_YT_VISITOR_DATA`: optional visitor data value
+- `YTSAVE_YT_PLAYER_SKIP`: optional yt-dlp extractor arg value such as `webpage,configs`
+- `YTSAVE_YT_TAB_SKIP`: optional yt-dlp extractor arg value such as `webpage`
+
+When both env vars and local files exist, env vars are used first.
