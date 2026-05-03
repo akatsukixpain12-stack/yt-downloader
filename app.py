@@ -163,6 +163,16 @@ def find_output_file(download_id, ext):
     return files[0] if files else ''
 
 
+@app.route('/sitemap.xml')
+def sitemap():
+    return send_from_directory('templates', 'sitemap.xml', mimetype='application/xml')
+
+
+@app.route('/robots.txt')
+def robots():
+    return "User-agent: *\nAllow: /\nSitemap: https://ytsave.onrender.com/sitemap.xml\n", 200, {'Content-Type': 'text/plain'}
+
+
 @app.route('/')
 def index():
     return send_from_directory('templates', 'index.html')
