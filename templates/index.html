@@ -181,7 +181,109 @@
   </div>
 </div>
 
+<!-- DONATE SECTION -->
+<div style="text-align:center;padding:2rem 1rem;border-top:1px solid #1e1e1e;">
+  <p style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#555;margin-bottom:1rem;">Support the Developer</p>
+  <p style="font-size:13px;color:#666;margin-bottom:1.25rem;">If YTSave helped you, consider buying me a coffee ☕</p>
+  <button onclick="donate()" style="background:#FF0000;border:none;color:#fff;padding:13px 32px;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;transition:background .2s;">
+    ❤️ Support Us / Donate
+  </button>
+  <p style="font-size:11px;color:#444;margin-top:10px;">Pays via UPI — PhonePe, GPay, Paytm, any UPI app</p>
+</div>
+
+<!-- DONATE MODAL -->
+<div id="donateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:999;align-items:center;justify-content:center;">
+  <div style="background:#161616;border:1px solid #2a2a2a;border-radius:16px;padding:2rem;max-width:360px;width:90%;text-align:center;position:relative;">
+    <button onclick="closeModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#666;font-size:20px;cursor:pointer;">✕</button>
+    <div id="donateContent">
+      <div style="font-size:36px;margin-bottom:12px;">❤️</div>
+      <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">Support YTSave</h2>
+      <p style="font-size:13px;color:#666;margin-bottom:20px;">Choose an amount to donate via UPI</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+        <button onclick="setAmount(10)" class="amt-btn">₹10</button>
+        <button onclick="setAmount(20)" class="amt-btn">₹20</button>
+        <button onclick="setAmount(50)" class="amt-btn">₹50</button>
+        <button onclick="setAmount(100)" class="amt-btn">₹100</button>
+      </div>
+      <div style="display:flex;border:1.5px solid #333;border-radius:8px;overflow:hidden;margin-bottom:16px;">
+        <span style="padding:10px 14px;background:#1a1a1a;color:#888;font-size:14px;">₹</span>
+        <input id="amtInput" type="number" min="1" placeholder="Custom amount" style="flex:1;background:transparent;border:none;outline:none;padding:10px;color:#fff;font-size:14px;font-family:'DM Sans',sans-serif;"/>
+      </div>
+      <button onclick="payNow()" style="width:100%;background:#FF0000;border:none;color:#fff;padding:14px;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;">
+        Pay Now via UPI ↗
+      </button>
+      <p style="font-size:11px;color:#444;margin-top:10px;">Opens PhonePe / GPay / Paytm / any UPI app</p>
+    </div>
+    <div id="thankYouContent" style="display:none;">
+      <div style="font-size:48px;margin-bottom:16px;">🎉</div>
+      <h2 style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#4ade80;margin-bottom:10px;">Thanks for Donating!</h2>
+      <p style="font-size:14px;color:#888;line-height:1.6;">Have a nice day! Your support keeps YTSave running. ❤️</p>
+      <button onclick="closeModal()" style="margin-top:20px;background:#4ade80;border:none;color:#000;padding:12px 28px;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Close</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .amt-btn {
+    background:#1a1a1a;border:1.5px solid #2a2a2a;color:#fff;
+    padding:10px;border-radius:8px;font-family:'Syne',sans-serif;
+    font-weight:700;font-size:15px;cursor:pointer;transition:all .15s;
+  }
+  .amt-btn:hover,.amt-btn.active{border-color:#FF4444;background:#200a0a;color:#FF4444;}
+</style>
+
 <footer><p>YTSave · Powered by <span>yt-dlp</span> · 1800+ platforms supported</p></footer>
+
+<script>
+  const UPI_ID = '7407589434@ybl';
+  const PAYEE_NAME = 'YTSave';
+  let selectedAmt = 0;
+
+  function donate() {
+    document.getElementById('donateModal').style.display = 'flex';
+    document.getElementById('donateContent').style.display = 'block';
+    document.getElementById('thankYouContent').style.display = 'none';
+  }
+
+  function closeModal() {
+    document.getElementById('donateModal').style.display = 'none';
+    document.getElementById('amtInput').value = '';
+    selectedAmt = 0;
+    document.querySelectorAll('.amt-btn').forEach(b => b.classList.remove('active'));
+  }
+
+  function setAmount(amt) {
+    selectedAmt = amt;
+    document.getElementById('amtInput').value = amt;
+    document.querySelectorAll('.amt-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+  }
+
+  function payNow() {
+    const amt = document.getElementById('amtInput').value || selectedAmt;
+    if (!amt || amt <= 0) {
+      alert('Please enter a donation amount.');
+      return;
+    }
+
+    // UPI deep link — opens any UPI app
+    const upiUrl = `upi://pay?pa=${UPI_ID}&pn=${encodeURIComponent(PAYEE_NAME)}&am=${amt}&cu=INR&tn=${encodeURIComponent('Donation to YTSave')}`;
+
+    // Try to open UPI app
+    window.location.href = upiUrl;
+
+    // Show thank you after 2 seconds (UPI app opens in background)
+    setTimeout(() => {
+      document.getElementById('donateContent').style.display = 'none';
+      document.getElementById('thankYouContent').style.display = 'block';
+    }, 2000);
+  }
+
+  // Close modal on backdrop click
+  document.getElementById('donateModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+</script>
 
 <script>
   let selectedFormat = null;
