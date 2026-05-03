@@ -228,18 +228,18 @@
       <p style="font-size:12px;color:#555;margin-bottom:20px;">Tap your preferred app below</p>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-        <button class="upi-btn" onclick="openUPI('phonepe')">
+        <a id="linkPhonePe" href="#" onclick="showThanks()" class="upi-btn">
           <span style="font-size:22px;">📱</span><br/>PhonePe
-        </button>
-        <button class="upi-btn" onclick="openUPI('gpay')">
+        </a>
+        <a id="linkGPay" href="#" onclick="showThanks()" class="upi-btn">
           <span style="font-size:22px;">🔵</span><br/>Google Pay
-        </button>
-        <button class="upi-btn" onclick="openUPI('paytm')">
+        </a>
+        <a id="linkPaytm" href="#" onclick="showThanks()" class="upi-btn">
           <span style="font-size:22px;">💙</span><br/>Paytm
-        </button>
-        <button class="upi-btn" onclick="openUPI('any')">
+        </a>
+        <a id="linkAny" href="#" onclick="showThanks()" class="upi-btn">
           <span style="font-size:22px;">📲</span><br/>Any UPI App
-        </button>
+        </a>
       </div>
       <button onclick="showThanks()" style="width:100%;background:#1a1a1a;border:1px solid #333;color:#888;padding:11px;border-radius:8px;font-size:13px;cursor:pointer;">
         ✓ I've paid — Show confirmation
@@ -259,15 +259,15 @@
 <style>
   .amt-btn { background:#1a1a1a;border:1.5px solid #2a2a2a;color:#fff;padding:11px;border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;transition:all .15s; }
   .amt-btn:hover,.amt-btn.active { border-color:#FF4444;background:#200a0a;color:#FF4444; }
-  .upi-btn { background:#1a1a1a;border:1.5px solid #2a2a2a;color:#fff;padding:14px 10px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s; }
+  .upi-btn { display:block;background:#1a1a1a;border:1.5px solid #2a2a2a;color:#fff;padding:14px 10px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;text-decoration:none;text-align:center; }
   .upi-btn:hover { border-color:#FF4444;background:#200a0a; }
 </style>
 
 <footer><p>YTSave · Powered by <span>yt-dlp</span> · 1800+ platforms supported</p></footer>
 
 <script>
-  const UPI_ID = '7407589434@ybl';
-  const PAYEE = 'YTSave';
+  const UPI_ID = '7407589434@fam';
+  const PAYEE = 'Manjiro';
   let donateAmt = 0;
 
   function openDonate() {
@@ -300,38 +300,16 @@
     donateAmt = amt;
     document.getElementById('payAmt').textContent = amt;
     hide('stepAmount'); show('stepPay');
-  }
 
-  function openUPI(app) {
-    const amt = donateAmt;
-    const note = encodeURIComponent('Donation to YTSave');
+    // Build UPI links with the amount
+    const upi = UPI_ID;
     const name = encodeURIComponent(PAYEE);
-    const upi = encodeURIComponent(UPI_ID);
+    const note = encodeURIComponent('Donation to YTSave');
 
-    // Universal UPI deep link — works on all apps
-    const upiUrl = `upi://pay?pa=${upi}&pn=${name}&am=${amt}&cu=INR&tn=${note}`;
-
-    // App-specific deep links for better experience
-    const links = {
-      phonepe: `phonepe://pay?pa=${upi}&pn=${name}&am=${amt}&cu=INR&tn=${note}`,
-      gpay:    `tez://upi/pay?pa=${upi}&pn=${name}&am=${amt}&cu=INR&tn=${note}`,
-      paytm:   `paytmmp://pay?pa=${upi}&pn=${name}&am=${amt}&cu=INR&tn=${note}`,
-      any:     upiUrl
-    };
-
-    const link = links[app] || upiUrl;
-
-    // Try app-specific first, fallback to universal
-    const a = document.createElement('a');
-    a.href = link;
-    a.click();
-
-    // If app-specific fails after 1.5s, try universal UPI
-    if (app !== 'any') {
-      setTimeout(() => {
-        window.location.href = upiUrl;
-      }, 1500);
-    }
+    document.getElementById('linkPhonePe').href = `upi://pay?pa=${upi}&pn=${name}&am=${amt}&cu=INR&tn=${note}`;
+    document.getElementById('linkGPay').href   = `upi://pay?pa=${upi}&pn=${name}&am=${amt}&cu=INR&tn=${note}`;
+    document.getElementById('linkPaytm').href  = `upi://pay?pa=${upi}&pn=${name}&am=${amt}&cu=INR&tn=${note}`;
+    document.getElementById('linkAny').href    = `upi://pay?pa=${upi}&pn=${name}&am=${amt}&cu=INR&tn=${note}`;
   }
 
   function showThanks() {
@@ -341,7 +319,6 @@
   function show(id) { document.getElementById(id).style.display = 'block'; }
   function hide(id) { document.getElementById(id).style.display = 'none'; }
 
-  // Close on backdrop click
   document.getElementById('donateModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
   });
