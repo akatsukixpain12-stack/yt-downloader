@@ -202,37 +202,26 @@ def build_format_string(height, ext):
 
 
 def choose_video_format_string(info, target_height):
-    """Build a format selector from actual extractor results for this specific video."""
-    formats = info.get('formats', [])
+    """Build a safe height-based format string — never uses specific format IDs."""
     target_height = int(target_height or 0)
 
-    progressive = []
-    video_only = []
-    audio_only = []
-    for fmt in formats:
-        height = int(fmt.get('height') or 0)
-        if height and target_height and height > target_height:
-            continue
-        if format_has_video_and_audio(fmt):
-            progressive.append(fmt)
-        elif is_video_format(fmt):
-            video_only.append(fmt)
-        elif is_audio_format(fmt):
-            audio_only.append(fmt)
-
-    progressive.sort(key=lambda f: (int(f.get('height') or 0), int(f.get('tbr') or 0)), reverse=True)
-    video_only.sort(key=lambda f: (int(f.get('height') or 0), int(f.get('tbr') or 0)), reverse=True)
-    audio_only.sort(key=lambda f: (int(f.get('abr') or f.get('tbr') or 0)), reverse=True)
-
-    selectors = []
-    if video_only and audio_only:
-        selectors.append(f"{video_only[0]['format_id']}+{audio_only[0]['format_id']}")
-    if progressive:
-        selectors.append(progressive[0]['format_id'])
-    if target_height:
-        selectors.append(build_format_string(target_height, 'mp4'))
-    selectors.append('bestvideo*+bestaudio/bestvideo+bestaudio/best')
-    return '/'.join(selectors)
+    if target_height > 0:
+        h = target_height
+        return (
+            f'bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/'
+            f'bestvideo[height<={h}][ext=mp4]+bestaudio/'
+            f'bestvideo[height<={h}]+bestaudio[ext=m4a]/'
+            f'bestvideo[height<={h}]+bestaudio/'
+            f'best[height<={h}]/'
+            f'bestvideo+bestaudio/'
+            f'best'
+        )
+    return (
+        'bestvideo[ext=mp4]+bestaudio[ext=m4a]/'
+        'bestvideo[ext=mp4]+bestaudio/'
+        'bestvideo+bestaudio/'
+        'best'
+    )
 
 
 def build_ydl_opts(download_id, height, ext):
@@ -468,30 +457,17 @@ def download():
                 with yt_dlp.YoutubeDL(build_ydl_opts(download_id, height, ext)) as ydl:
                     ydl.download([url])
             else:
-                with yt_dlp.YoutubeDL({
-                    'quiet': True,
-                    'no_warnings': True,
-                    'skip_download': True,
-                    'noplaylist': True,
-                    **get_cookies_opts()
-                }) as ydl:
-                    info = ydl.extract_info(url, download=False)
-
-                format_string = choose_video_format_string(info, height)
+                format_string = choose_video_format_string(None, height)
                 try:
                     with yt_dlp.YoutubeDL(build_video_ydl_opts(download_id, format_string)) as ydl:
                         ydl.download([url])
                 except yt_dlp.utils.DownloadError as e:
-                    error_text = str(e)
-                    if 'Requested format is not available' not in error_text:
+                    if 'Requested format is not available' not in str(e):
                         raise
-
                     cleanup_temp_files(download_id)
                     progress_data[download_id].update({
-                        'status': 'processing',
-                        'percent': 5,
-                        'eta': 'Requested format unavailable. Retrying with best available...',
-                        'error': ''
+                        'status': 'processing', 'percent': 5,
+                        'eta': 'Retrying with best available...'
                     })
                     with yt_dlp.YoutubeDL(build_fallback_ydl_opts(download_id, ext)) as ydl:
                         ydl.download([url])
