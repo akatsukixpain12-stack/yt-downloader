@@ -9,6 +9,18 @@ import yt_dlp
 
 app = Flask(__name__)
 
+# Security headers for all responses
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    # Allow download links to work on iOS Safari
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
 TEMP_FOLDER = os.path.join(tempfile.gettempdir(), "ytsave")
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
@@ -72,17 +84,38 @@ def get_postprocessor_hook(download_id):
             if not filepath or not os.path.exists(filepath):
                 files = glob.glob(os.path.join(TEMP_FOLDER, f"{download_id}.*"))
                 filepath = files[0] if files else ''
-            progress_data[download_id].update({
-                'status': 'finished', 'percent': 100,
-                'speed': '', 'eta': '',
-                'filepath': filepath,
-                'filename': os.path.basename(filepath) if filepath else ''
-            })
+            if filepath and os.path.exists(filepath):
+                progress_data[download_id].update({
+                    'status': 'finished', 'percent': 100,
+                    'speed': '', 'eta': '',
+                    'filepath': filepath,
+                    'filename': os.path.basename(filepath)
+                })
     return hook
 
 
+def build_format_string(height, ext):
+    """Build a robust format string that never fails."""
+    if ext == 'mp3':
+        return 'bestaudio/best'
+    if ext == 'm4a':
+        return 'bestaudio[ext=m4a]/bestaudio/best'
+
+    if height and int(height) > 0:
+        h = int(height)
+        return (
+            f'bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/'
+            f'bestvideo[height<={h}][ext=mp4]+bestaudio/'
+            f'bestvideo[height<={h}]+bestaudio[ext=m4a]/'
+            f'bestvideo[height<={h}]+bestaudio/'
+            f'best[height<={h}]/'
+            f'bestvideo+bestaudio/'
+            f'best'
+        )
+    return 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+
+
 def build_ydl_opts(download_id, height, ext):
-    """Build download options using height-based format selection — never fails."""
     outtmpl = os.path.join(TEMP_FOLDER, f'{download_id}.%(ext)s')
     cookies = get_cookies_opts()
     hooks = {
@@ -107,22 +140,8 @@ def build_ydl_opts(download_id, height, ext):
             **hooks, **cookies
         }
 
-    # Video: use height-based format string with multiple fallbacks
-    if height and int(height) > 0:
-        h = int(height)
-        fmt = (
-            f'bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/'
-            f'bestvideo[height<={h}][ext=mp4]+bestaudio/'
-            f'bestvideo[height<={h}]+bestaudio/'
-            f'best[height<={h}]/'
-            f'bestvideo+bestaudio/'
-            f'best'
-        )
-    else:
-        fmt = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
-
     return {
-        'format': fmt,
+        'format': build_format_string(height, ext),
         'outtmpl': outtmpl,
         'merge_output_format': 'mp4',
         'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
@@ -130,18 +149,17 @@ def build_ydl_opts(download_id, height, ext):
     }
 
 
-def resolve_file(download_id, ext, ydl, info):
-    try:
-        filepath = ydl.prepare_filename(info)
-        if ext == 'mp3':
-            filepath = os.path.splitext(filepath)[0] + '.mp3'
-        elif ext != 'm4a':
-            filepath = os.path.splitext(filepath)[0] + '.mp4'
-        if os.path.exists(filepath):
-            return filepath
-    except Exception:
-        pass
+def find_output_file(download_id, ext):
+    """Find the downloaded file reliably."""
+    # Try exact extensions first
+    for e in [ext, 'mp4', 'mkv', 'webm', 'mp3', 'm4a']:
+        path = os.path.join(TEMP_FOLDER, f'{download_id}.{e}')
+        if os.path.exists(path):
+            return path
+    # Glob fallback
     files = glob.glob(os.path.join(TEMP_FOLDER, f'{download_id}.*'))
+    # Filter out partial/temp files
+    files = [f for f in files if not f.endswith('.part') and not f.endswith('.ytdl')]
     return files[0] if files else ''
 
 
@@ -158,7 +176,7 @@ def healthz():
 @app.route('/info', methods=['POST'])
 def get_info():
     data = request.get_json()
-    url = data.get('url', '').strip()
+    url = (data.get('url') or '').strip()
     if not url:
         return jsonify({'error': 'No URL provided'}), 400
 
@@ -171,7 +189,7 @@ def get_info():
 
         all_formats = info.get('formats', [])
 
-        # Collect all unique heights with video
+        # Collect unique heights
         seen = set()
         video_formats = []
         for f in all_formats:
@@ -229,7 +247,7 @@ def get_info():
 @app.route('/download', methods=['POST'])
 def download():
     data = request.get_json()
-    url = data.get('url', '').strip()
+    url = (data.get('url') or '').strip()
     height = data.get('height', 0)
     ext = data.get('ext', 'mp4')
     quality = data.get('quality', '')
@@ -249,26 +267,24 @@ def download():
     def run():
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filepath = resolve_file(download_id, ext, ydl, info)
-                if os.path.exists(filepath):
-                    progress_data[download_id].update({
-                        'status': 'finished', 'percent': 100,
-                        'filepath': filepath,
-                        'filename': os.path.basename(filepath)
-                    })
-                elif progress_data[download_id].get('status') not in ('finished', 'error'):
-                    files = glob.glob(os.path.join(TEMP_FOLDER, f'{download_id}.*'))
-                    if files:
-                        progress_data[download_id].update({
-                            'status': 'finished', 'percent': 100,
-                            'filepath': files[0],
-                            'filename': os.path.basename(files[0])
-                        })
-                    else:
-                        progress_data[download_id].update({'status': 'error', 'error': 'File not found.'})
+                ydl.download([url])
+
+            # Find the file after download
+            filepath = find_output_file(download_id, ext)
+            if filepath:
+                progress_data[download_id].update({
+                    'status': 'finished', 'percent': 100,
+                    'filepath': filepath,
+                    'filename': os.path.basename(filepath)
+                })
+            elif progress_data[download_id].get('status') not in ('finished', 'error'):
+                progress_data[download_id].update({
+                    'status': 'error', 'error': 'File not found after download.'
+                })
         except Exception as e:
-            progress_data[download_id].update({'status': 'error', 'percent': 0, 'error': str(e)})
+            progress_data[download_id].update({
+                'status': 'error', 'percent': 0, 'error': str(e)
+            })
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({'status': 'started', 'download_id': download_id})
@@ -287,16 +303,26 @@ def serve_file(download_id):
 
     filepath = d.get('filepath', '')
     if not filepath or not os.path.exists(filepath):
-        files = glob.glob(os.path.join(TEMP_FOLDER, f'{download_id}.*'))
-        if not files:
+        # Try to find it again
+        ext = d.get('ext', 'mp4')
+        filepath = find_output_file(download_id, ext)
+        if not filepath:
             return jsonify({'error': 'File not found'}), 404
-        filepath = files[0]
 
     filename = d.get('filename', os.path.basename(filepath))
     filename = "".join(c for c in filename if c not in r'\/:*?"<>|').strip()
-    ext = os.path.splitext(filepath)[1].lower()
-    mime_map = {'.mp4': 'video/mp4', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.webm': 'video/webm'}
-    mimetype = mime_map.get(ext, 'application/octet-stream')
+    if not filename:
+        filename = f'download.{d.get("ext", "mp4")}'
+
+    ext_lower = os.path.splitext(filepath)[1].lower()
+    mime_map = {
+        '.mp4': 'video/mp4',
+        '.mp3': 'audio/mpeg',
+        '.m4a': 'audio/mp4',
+        '.webm': 'video/webm',
+        '.mkv': 'video/x-matroska'
+    }
+    mimetype = mime_map.get(ext_lower, 'application/octet-stream')
 
     @after_this_request
     def cleanup(response):
@@ -307,7 +333,13 @@ def serve_file(download_id):
             pass
         return response
 
-    return send_file(filepath, mimetype=mimetype, as_attachment=True, download_name=filename)
+    return send_file(
+        filepath,
+        mimetype=mimetype,
+        as_attachment=True,
+        download_name=filename,
+        conditional=False  # Fixes iOS Safari double-download bug
+    )
 
 
 if __name__ == '__main__':
