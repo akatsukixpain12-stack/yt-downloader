@@ -49,6 +49,18 @@ def format_size(size):
     return f'{round(size / 1024 / 1024, 1)} MB' if size else 'Unknown'
 
 
+def is_video_format(fmt):
+    return fmt.get('vcodec', 'none') != 'none' and fmt.get('height')
+
+
+def is_audio_format(fmt):
+    return fmt.get('acodec', 'none') != 'none'
+
+
+def format_has_video_and_audio(fmt):
+    return is_video_format(fmt) and is_audio_format(fmt)
+
+
 def get_progress_hook(download_id):
     def hook(d):
         if d['status'] == 'downloading':
@@ -110,6 +122,40 @@ def build_format_string(height, ext):
             f'best'
         )
     return 'bestvideo*+bestaudio/bestvideo+bestaudio/best'
+
+
+def choose_video_format_string(info, target_height):
+    """Build a format selector from actual extractor results for this specific video."""
+    formats = info.get('formats', [])
+    target_height = int(target_height or 0)
+
+    progressive = []
+    video_only = []
+    audio_only = []
+    for fmt in formats:
+        height = int(fmt.get('height') or 0)
+        if height and target_height and height > target_height:
+            continue
+        if format_has_video_and_audio(fmt):
+            progressive.append(fmt)
+        elif is_video_format(fmt):
+            video_only.append(fmt)
+        elif is_audio_format(fmt):
+            audio_only.append(fmt)
+
+    progressive.sort(key=lambda f: (int(f.get('height') or 0), int(f.get('tbr') or 0)), reverse=True)
+    video_only.sort(key=lambda f: (int(f.get('height') or 0), int(f.get('tbr') or 0)), reverse=True)
+    audio_only.sort(key=lambda f: (int(f.get('abr') or f.get('tbr') or 0)), reverse=True)
+
+    selectors = []
+    if video_only and audio_only:
+        selectors.append(f"{video_only[0]['format_id']}+{audio_only[0]['format_id']}")
+    if progressive:
+        selectors.append(progressive[0]['format_id'])
+    if target_height:
+        selectors.append(build_format_string(target_height, 'mp4'))
+    selectors.append('bestvideo*+bestaudio/bestvideo+bestaudio/best')
+    return '/'.join(selectors)
 
 
 def build_ydl_opts(download_id, height, ext):
@@ -175,6 +221,25 @@ def build_fallback_ydl_opts(download_id, ext):
 
     return {
         'format': 'bestvideo*+bestaudio/bestvideo+bestaudio/best',
+        'outtmpl': outtmpl,
+        'merge_output_format': 'mp4',
+        'format_sort': ['ext:mp4:m4a', 'res', 'fps', 'hdr:12', 'codec:h264'],
+        'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
+        **hooks, **cookies
+    }
+
+
+def build_video_ydl_opts(download_id, format_string):
+    outtmpl = os.path.join(TEMP_FOLDER, f'{download_id}.%(ext)s')
+    cookies = get_cookies_opts()
+    hooks = {
+        'progress_hooks': [get_progress_hook(download_id)],
+        'postprocessor_hooks': [get_postprocessor_hook(download_id)],
+        'quiet': True,
+        'no_warnings': True,
+    }
+    return {
+        'format': format_string,
         'outtmpl': outtmpl,
         'merge_output_format': 'mp4',
         'format_sort': ['ext:mp4:m4a', 'res', 'fps', 'hdr:12', 'codec:h264'],
@@ -315,27 +380,38 @@ def download():
         'filename': '', 'quality': quality, 'ext': ext, 'filepath': ''
     }
 
-    ydl_opts = build_ydl_opts(download_id, height, ext)
-
     def run():
         try:
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            if ext in ('mp3', 'm4a'):
+                with yt_dlp.YoutubeDL(build_ydl_opts(download_id, height, ext)) as ydl:
                     ydl.download([url])
-            except yt_dlp.utils.DownloadError as e:
-                error_text = str(e)
-                if 'Requested format is not available' not in error_text:
-                    raise
+            else:
+                with yt_dlp.YoutubeDL({
+                    'quiet': True,
+                    'no_warnings': True,
+                    'skip_download': True,
+                    **get_cookies_opts()
+                }) as ydl:
+                    info = ydl.extract_info(url, download=False)
 
-                cleanup_temp_files(download_id)
-                progress_data[download_id].update({
-                    'status': 'processing',
-                    'percent': 5,
-                    'eta': 'Requested format unavailable. Retrying with best available...',
-                    'error': ''
-                })
-                with yt_dlp.YoutubeDL(build_fallback_ydl_opts(download_id, ext)) as ydl:
-                    ydl.download([url])
+                format_string = choose_video_format_string(info, height)
+                try:
+                    with yt_dlp.YoutubeDL(build_video_ydl_opts(download_id, format_string)) as ydl:
+                        ydl.download([url])
+                except yt_dlp.utils.DownloadError as e:
+                    error_text = str(e)
+                    if 'Requested format is not available' not in error_text:
+                        raise
+
+                    cleanup_temp_files(download_id)
+                    progress_data[download_id].update({
+                        'status': 'processing',
+                        'percent': 5,
+                        'eta': 'Requested format unavailable. Retrying with best available...',
+                        'error': ''
+                    })
+                    with yt_dlp.YoutubeDL(build_fallback_ydl_opts(download_id, ext)) as ydl:
+                        ydl.download([url])
 
             # Find the file after download
             filepath = find_output_file(download_id, ext)
