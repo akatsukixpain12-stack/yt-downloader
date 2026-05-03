@@ -95,7 +95,7 @@ def get_postprocessor_hook(download_id):
 
 
 def build_format_string(height, ext):
-    """Build a robust format string that never fails."""
+    """Prefer the requested height, but allow any container combination yt-dlp can merge."""
     if ext == 'mp3':
         return 'bestaudio/best'
     if ext == 'm4a':
@@ -104,15 +104,12 @@ def build_format_string(height, ext):
     if height and int(height) > 0:
         h = int(height)
         return (
-            f'bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/'
-            f'bestvideo[height<={h}][ext=mp4]+bestaudio/'
-            f'bestvideo[height<={h}]+bestaudio[ext=m4a]/'
-            f'bestvideo[height<={h}]+bestaudio/'
-            f'best[height<={h}]/'
+            f'bestvideo*[height<={h}]+bestaudio/best*[height<={h}]/'
             f'bestvideo+bestaudio/'
+            f'best[height<={h}]/'
             f'best'
         )
-    return 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+    return 'bestvideo*+bestaudio/bestvideo+bestaudio/best'
 
 
 def build_ydl_opts(download_id, height, ext):
@@ -144,6 +141,7 @@ def build_ydl_opts(download_id, height, ext):
         'format': build_format_string(height, ext),
         'outtmpl': outtmpl,
         'merge_output_format': 'mp4',
+        'format_sort': ['ext:mp4:m4a', 'res', 'fps', 'hdr:12', 'codec:h264'],
         'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
         **hooks, **cookies
     }
@@ -176,9 +174,10 @@ def build_fallback_ydl_opts(download_id, ext):
         }
 
     return {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best',
+        'format': 'bestvideo*+bestaudio/bestvideo+bestaudio/best',
         'outtmpl': outtmpl,
         'merge_output_format': 'mp4',
+        'format_sort': ['ext:mp4:m4a', 'res', 'fps', 'hdr:12', 'codec:h264'],
         'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
         **hooks, **cookies
     }
