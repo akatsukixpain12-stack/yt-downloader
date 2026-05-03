@@ -1,4 +1,3 @@
-import base64
 import glob
 import os
 import tempfile
@@ -10,106 +9,18 @@ import yt_dlp
 
 app = Flask(__name__)
 
-# Security headers for all responses
 @app.after_request
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
-    # Allow download links to work on iOS Safari
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
 TEMP_FOLDER = os.path.join(tempfile.gettempdir(), "ytsave")
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
-COOKIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
-RUNTIME_COOKIES_FILE = os.path.join(TEMP_FOLDER, 'cookies.runtime.txt')
-
 progress_data = {}
-
-
-def _write_runtime_cookies_file(content):
-    with open(RUNTIME_COOKIES_FILE, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(content.strip() + '\n')
-    return RUNTIME_COOKIES_FILE
-
-
-def get_cookiefile_path():
-    cookies_b64 = os.environ.get('YTSAVE_YOUTUBE_COOKIES_B64', '').strip()
-    if cookies_b64:
-        try:
-            decoded = base64.b64decode(cookies_b64).decode('utf-8')
-            return _write_runtime_cookies_file(decoded)
-        except Exception as e:
-            print(f'Invalid YTSAVE_YOUTUBE_COOKIES_B64: {e}')
-
-    cookies_text = os.environ.get('YTSAVE_YOUTUBE_COOKIES', '')
-    if cookies_text.strip():
-        return _write_runtime_cookies_file(cookies_text)
-
-    if os.path.exists(COOKIES_FILE):
-        return COOKIES_FILE
-
-    return ''
-
-
-def get_youtube_extractor_args():
-    youtube_args = {}
-    youtubetab_args = {}
-
-    player_clients = [x.strip() for x in os.environ.get('YTSAVE_YT_PLAYER_CLIENT', '').split(',') if x.strip()]
-    po_tokens = [x.strip() for x in os.environ.get('YTSAVE_YT_PO_TOKEN', '').split(',') if x.strip()]
-    visitor_data = os.environ.get('YTSAVE_YT_VISITOR_DATA', '').strip()
-    player_skip = os.environ.get('YTSAVE_YT_PLAYER_SKIP', '').strip()
-    tab_skip = os.environ.get('YTSAVE_YT_TAB_SKIP', '').strip()
-
-    if player_clients:
-        youtube_args['player_client'] = player_clients
-    if po_tokens:
-        youtube_args['po_token'] = po_tokens
-    if visitor_data:
-        youtube_args['visitor_data'] = [visitor_data]
-    if player_skip:
-        youtube_args['player_skip'] = [player_skip]
-    if tab_skip:
-        youtubetab_args['skip'] = [tab_skip]
-
-    extractor_args = {}
-    if youtube_args:
-        extractor_args['youtube'] = youtube_args
-    if youtubetab_args:
-        extractor_args['youtubetab'] = youtubetab_args
-    return extractor_args
-
-
-def get_auth_opts():
-    opts = {}
-    cookiefile = get_cookiefile_path()
-    if cookiefile:
-        opts['cookiefile'] = cookiefile
-
-    extractor_args = get_youtube_extractor_args()
-    if extractor_args:
-        opts['extractor_args'] = extractor_args
-
-    return opts
-
-
-def get_cookies_opts():
-    return get_auth_opts()
-
-
-def user_facing_error(message):
-    msg = str(message)
-    if "Sign in to confirm you're not a bot" in msg:
-        return (
-            "YouTube blocked this server session. Refresh your YouTube cookies, or configure a PO token/client "
-            "for this Render service. Public cloud IPs get challenged often."
-        )
-    return msg
 
 
 def quality_label(height):
@@ -124,18 +35,6 @@ def quality_label(height):
 
 def format_size(size):
     return f'{round(size / 1024 / 1024, 1)} MB' if size else 'Unknown'
-
-
-def is_video_format(fmt):
-    return fmt.get('vcodec', 'none') != 'none' and fmt.get('height')
-
-
-def is_audio_format(fmt):
-    return fmt.get('acodec', 'none') != 'none'
-
-
-def format_has_video_and_audio(fmt):
-    return is_video_format(fmt) and is_audio_format(fmt)
 
 
 def get_progress_hook(download_id):
@@ -183,30 +82,10 @@ def get_postprocessor_hook(download_id):
     return hook
 
 
-def build_format_string(height, ext):
-    """Prefer the requested height, but allow any container combination yt-dlp can merge."""
-    if ext == 'mp3':
-        return 'bestaudio/best'
-    if ext == 'm4a':
-        return 'bestaudio[ext=m4a]/bestaudio/best'
-
+def make_format_string(height):
+    """Height-based format string with multiple fallbacks — never fails."""
     if height and int(height) > 0:
         h = int(height)
-        return (
-            f'bestvideo*[height<={h}]+bestaudio/best*[height<={h}]/'
-            f'bestvideo+bestaudio/'
-            f'best[height<={h}]/'
-            f'best'
-        )
-    return 'bestvideo*+bestaudio/bestvideo+bestaudio/best'
-
-
-def choose_video_format_string(info, target_height):
-    """Build a safe height-based format string — never uses specific format IDs."""
-    target_height = int(target_height or 0)
-
-    if target_height > 0:
-        h = target_height
         return (
             f'bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/'
             f'bestvideo[height<={h}][ext=mp4]+bestaudio/'
@@ -216,128 +95,27 @@ def choose_video_format_string(info, target_height):
             f'bestvideo+bestaudio/'
             f'best'
         )
-    return (
-        'bestvideo[ext=mp4]+bestaudio[ext=m4a]/'
-        'bestvideo[ext=mp4]+bestaudio/'
-        'bestvideo+bestaudio/'
-        'best'
-    )
+    return 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
 
 
-def build_ydl_opts(download_id, height, ext):
-    outtmpl = os.path.join(TEMP_FOLDER, f'{download_id}.%(ext)s')
-    cookies = get_cookies_opts()
-    hooks = {
+def base_opts(download_id):
+    return {
         'progress_hooks': [get_progress_hook(download_id)],
         'postprocessor_hooks': [get_postprocessor_hook(download_id)],
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
-    }
-
-    if ext == 'mp3':
-        return {
-            'format': 'bestaudio/best',
-            'outtmpl': outtmpl,
-            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
-            **hooks, **cookies
-        }
-
-    if ext == 'm4a':
-        return {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
-            'outtmpl': outtmpl,
-            **hooks, **cookies
-        }
-
-    return {
-        'format': build_format_string(height, ext),
-        'outtmpl': outtmpl,
-        'merge_output_format': 'mp4',
-        'format_sort': ['ext:mp4:m4a', 'res', 'fps', 'hdr:12', 'codec:h264'],
-        'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
-        **hooks, **cookies
-    }
-
-
-def build_fallback_ydl_opts(download_id, ext):
-    """Fallback to the best available stream if the requested format is unavailable."""
-    outtmpl = os.path.join(TEMP_FOLDER, f'{download_id}.%(ext)s')
-    cookies = get_cookies_opts()
-    hooks = {
-        'progress_hooks': [get_progress_hook(download_id)],
-        'postprocessor_hooks': [get_postprocessor_hook(download_id)],
-        'quiet': True,
-        'no_warnings': True,
-        'noplaylist': True,
-    }
-
-    if ext == 'mp3':
-        return {
-            'format': 'bestaudio/best',
-            'outtmpl': outtmpl,
-            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
-            **hooks, **cookies
-        }
-
-    if ext == 'm4a':
-        return {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
-            'outtmpl': outtmpl,
-            **hooks, **cookies
-        }
-
-    return {
-        'format': 'bestvideo*+bestaudio/bestvideo+bestaudio/best',
-        'outtmpl': outtmpl,
-        'merge_output_format': 'mp4',
-        'format_sort': ['ext:mp4:m4a', 'res', 'fps', 'hdr:12', 'codec:h264'],
-        'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
-        **hooks, **cookies
-    }
-
-
-def build_video_ydl_opts(download_id, format_string):
-    outtmpl = os.path.join(TEMP_FOLDER, f'{download_id}.%(ext)s')
-    cookies = get_cookies_opts()
-    hooks = {
-        'progress_hooks': [get_progress_hook(download_id)],
-        'postprocessor_hooks': [get_postprocessor_hook(download_id)],
-        'quiet': True,
-        'no_warnings': True,
-        'noplaylist': True,
-    }
-    return {
-        'format': format_string,
-        'outtmpl': outtmpl,
-        'merge_output_format': 'mp4',
-        'format_sort': ['ext:mp4:m4a', 'res', 'fps', 'hdr:12', 'codec:h264'],
-        'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
-        **hooks, **cookies
     }
 
 
 def find_output_file(download_id, ext):
-    """Find the downloaded file reliably."""
-    # Try exact extensions first
     for e in [ext, 'mp4', 'mkv', 'webm', 'mp3', 'm4a']:
         path = os.path.join(TEMP_FOLDER, f'{download_id}.{e}')
         if os.path.exists(path):
             return path
-    # Glob fallback
     files = glob.glob(os.path.join(TEMP_FOLDER, f'{download_id}.*'))
-    # Filter out partial/temp files
     files = [f for f in files if not f.endswith('.part') and not f.endswith('.ytdl')]
     return files[0] if files else ''
-
-
-def cleanup_temp_files(download_id):
-    for path in glob.glob(os.path.join(TEMP_FOLDER, f'{download_id}.*')):
-        if os.path.isfile(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
 
 
 @app.route('/sitemap.xml')
@@ -370,15 +148,11 @@ def get_info():
     try:
         with yt_dlp.YoutubeDL({
             'quiet': True, 'no_warnings': True,
-            'skip_download': True,
-            'noplaylist': True,
-            **get_cookies_opts()
+            'skip_download': True, 'noplaylist': True,
         }) as ydl:
             info = ydl.extract_info(url, download=False)
 
         all_formats = info.get('formats', [])
-
-        # Collect unique heights
         seen = set()
         video_formats = []
         for f in all_formats:
@@ -412,9 +186,9 @@ def get_info():
 
         webpage_url = info.get('webpage_url', url)
         platform = 'YouTube'
-        for kw, name in [('instagram', 'Instagram'), ('facebook', 'Facebook'), ('fb.com', 'Facebook'),
-                         ('tiktok', 'TikTok'), ('twitter', 'Twitter/X'), ('x.com', 'Twitter/X'),
-                         ('vimeo', 'Vimeo'), ('dailymotion', 'Dailymotion')]:
+        for kw, name in [('instagram','Instagram'),('facebook','Facebook'),('fb.com','Facebook'),
+                         ('tiktok','TikTok'),('twitter','Twitter/X'),('x.com','Twitter/X'),
+                         ('vimeo','Vimeo'),('dailymotion','Dailymotion')]:
             if kw in webpage_url:
                 platform = name
                 break
@@ -430,7 +204,7 @@ def get_info():
         })
 
     except Exception as e:
-        return jsonify({'error': user_facing_error(e)}), 400
+        return jsonify({'error': str(e)}), 400
 
 
 @app.route('/download', methods=['POST'])
@@ -451,28 +225,36 @@ def download():
         'filename': '', 'quality': quality, 'ext': ext, 'filepath': ''
     }
 
+    outtmpl = os.path.join(TEMP_FOLDER, f'{download_id}.%(ext)s')
+    opts = base_opts(download_id)
+
+    if ext == 'mp3':
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': outtmpl,
+            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
+            **opts
+        }
+    elif ext == 'm4a':
+        ydl_opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'outtmpl': outtmpl,
+            **opts
+        }
+    else:
+        ydl_opts = {
+            'format': make_format_string(height),
+            'outtmpl': outtmpl,
+            'merge_output_format': 'mp4',
+            'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
+            **opts
+        }
+
     def run():
         try:
-            if ext in ('mp3', 'm4a'):
-                with yt_dlp.YoutubeDL(build_ydl_opts(download_id, height, ext)) as ydl:
-                    ydl.download([url])
-            else:
-                format_string = choose_video_format_string(None, height)
-                try:
-                    with yt_dlp.YoutubeDL(build_video_ydl_opts(download_id, format_string)) as ydl:
-                        ydl.download([url])
-                except yt_dlp.utils.DownloadError as e:
-                    if 'Requested format is not available' not in str(e):
-                        raise
-                    cleanup_temp_files(download_id)
-                    progress_data[download_id].update({
-                        'status': 'processing', 'percent': 5,
-                        'eta': 'Retrying with best available...'
-                    })
-                    with yt_dlp.YoutubeDL(build_fallback_ydl_opts(download_id, ext)) as ydl:
-                        ydl.download([url])
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
 
-            # Find the file after download
             filepath = find_output_file(download_id, ext)
             if filepath:
                 progress_data[download_id].update({
@@ -486,7 +268,7 @@ def download():
                 })
         except Exception as e:
             progress_data[download_id].update({
-                'status': 'error', 'percent': 0, 'error': user_facing_error(e)
+                'status': 'error', 'percent': 0, 'error': str(e)
             })
 
     threading.Thread(target=run, daemon=True).start()
@@ -506,26 +288,15 @@ def serve_file(download_id):
 
     filepath = d.get('filepath', '')
     if not filepath or not os.path.exists(filepath):
-        # Try to find it again
-        ext = d.get('ext', 'mp4')
-        filepath = find_output_file(download_id, ext)
+        filepath = find_output_file(download_id, d.get('ext', 'mp4'))
         if not filepath:
             return jsonify({'error': 'File not found'}), 404
 
     filename = d.get('filename', os.path.basename(filepath))
-    filename = "".join(c for c in filename if c not in r'\/:*?"<>|').strip()
-    if not filename:
-        filename = f'download.{d.get("ext", "mp4")}'
+    filename = "".join(c for c in filename if c not in r'\/:*?"<>|').strip() or f'download.{d.get("ext","mp4")}'
 
-    ext_lower = os.path.splitext(filepath)[1].lower()
-    mime_map = {
-        '.mp4': 'video/mp4',
-        '.mp3': 'audio/mpeg',
-        '.m4a': 'audio/mp4',
-        '.webm': 'video/webm',
-        '.mkv': 'video/x-matroska'
-    }
-    mimetype = mime_map.get(ext_lower, 'application/octet-stream')
+    mime_map = {'.mp4':'video/mp4','.mp3':'audio/mpeg','.m4a':'audio/mp4','.webm':'video/webm'}
+    mimetype = mime_map.get(os.path.splitext(filepath)[1].lower(), 'application/octet-stream')
 
     @after_this_request
     def cleanup(response):
@@ -536,13 +307,8 @@ def serve_file(download_id):
             pass
         return response
 
-    return send_file(
-        filepath,
-        mimetype=mimetype,
-        as_attachment=True,
-        download_name=filename,
-        conditional=False  # Fixes iOS Safari double-download bug
-    )
+    return send_file(filepath, mimetype=mimetype, as_attachment=True,
+                     download_name=filename, conditional=False)
 
 
 if __name__ == '__main__':
