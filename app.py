@@ -149,6 +149,41 @@ def build_ydl_opts(download_id, height, ext):
     }
 
 
+def build_fallback_ydl_opts(download_id, ext):
+    """Fallback to the best available stream if the requested format is unavailable."""
+    outtmpl = os.path.join(TEMP_FOLDER, f'{download_id}.%(ext)s')
+    cookies = get_cookies_opts()
+    hooks = {
+        'progress_hooks': [get_progress_hook(download_id)],
+        'postprocessor_hooks': [get_postprocessor_hook(download_id)],
+        'quiet': True,
+        'no_warnings': True,
+    }
+
+    if ext == 'mp3':
+        return {
+            'format': 'bestaudio/best',
+            'outtmpl': outtmpl,
+            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
+            **hooks, **cookies
+        }
+
+    if ext == 'm4a':
+        return {
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'outtmpl': outtmpl,
+            **hooks, **cookies
+        }
+
+    return {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best',
+        'outtmpl': outtmpl,
+        'merge_output_format': 'mp4',
+        'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
+        **hooks, **cookies
+    }
+
+
 def find_output_file(download_id, ext):
     """Find the downloaded file reliably."""
     # Try exact extensions first
@@ -161,6 +196,15 @@ def find_output_file(download_id, ext):
     # Filter out partial/temp files
     files = [f for f in files if not f.endswith('.part') and not f.endswith('.ytdl')]
     return files[0] if files else ''
+
+
+def cleanup_temp_files(download_id):
+    for path in glob.glob(os.path.join(TEMP_FOLDER, f'{download_id}.*')):
+        if os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
 @app.route('/sitemap.xml')
@@ -276,8 +320,23 @@ def download():
 
     def run():
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+            except yt_dlp.utils.DownloadError as e:
+                error_text = str(e)
+                if 'Requested format is not available' not in error_text:
+                    raise
+
+                cleanup_temp_files(download_id)
+                progress_data[download_id].update({
+                    'status': 'processing',
+                    'percent': 5,
+                    'eta': 'Requested format unavailable. Retrying with best available...',
+                    'error': ''
+                })
+                with yt_dlp.YoutubeDL(build_fallback_ydl_opts(download_id, ext)) as ydl:
+                    ydl.download([url])
 
             # Find the file after download
             filepath = find_output_file(download_id, ext)

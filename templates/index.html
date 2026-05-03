@@ -224,7 +224,7 @@
     <div id="stepPay" style="display:none;">
       <div style="font-size:38px;margin-bottom:10px;">💳</div>
       <h2 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:6px;">Pay ₹<span id="payAmt">0</span></h2>
-      <p style="font-size:13px;color:#666;margin-bottom:6px;">UPI ID: <strong style="color:#fff;">7407589434@ybl</strong></p>
+      <p style="font-size:13px;color:#666;margin-bottom:6px;">UPI ID: <strong style="color:#fff;">7407589434@fam</strong></p>
       <p style="font-size:12px;color:#555;margin-bottom:20px;">Tap your preferred app below</p>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
@@ -329,6 +329,8 @@
   let currentUrl = '';
   let pollInterval = null;
   let downloadId = 0;
+  let activeDownloadId = null;
+  let isStartingDownload = false;
 
   document.getElementById('urlInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') fetchInfo();
@@ -395,8 +397,9 @@
   }
 
   async function startDownload() {
-    if (!selectedFormat || !currentUrl) return;
+    if (!selectedFormat || !currentUrl || isStartingDownload || activeDownloadId) return;
 
+    isStartingDownload = true;
     downloadId++;
     const dlId = 'dl_' + downloadId;
 
@@ -422,9 +425,12 @@
       });
       const data = await res.json();
       if (data.error) { showProgressError(data.error); return; }
+      activeDownloadId = data.download_id;
       pollProgress(data.download_id);
     } catch (e) {
       showProgressError('Failed to start download.');
+    } finally {
+      isStartingDownload = false;
     }
   }
 
@@ -442,6 +448,7 @@
           updateProgress(99, 'Processing with FFmpeg...', '', 'Almost done...', '');
         } else if (data.status === 'finished') {
           clearInterval(pollInterval);
+          pollInterval = null;
           updateProgress(100, 'Complete!', '', '', '');
           setTimeout(() => {
             document.getElementById('progressWrap').classList.remove('visible');
@@ -449,9 +456,11 @@
             const btn = document.getElementById('dlBtn');
             btn.disabled = false;
             btn.textContent = 'Download Another Format';
+            activeDownloadId = null;
           }, 600);
         } else if (data.status === 'error') {
           clearInterval(pollInterval);
+          pollInterval = null;
           showProgressError(data.error || 'Download failed.');
         }
       } catch (e) { /* ignore */ }
@@ -476,6 +485,9 @@
 
   function showProgressError(msg) {
     if (pollInterval) clearInterval(pollInterval);
+    pollInterval = null;
+    activeDownloadId = null;
+    isStartingDownload = false;
     document.getElementById('progressWrap').classList.remove('visible');
     showError(msg);
     const btn = document.getElementById('dlBtn');
@@ -490,6 +502,10 @@
   }
 
   function hideAll() {
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = null;
+    activeDownloadId = null;
+    isStartingDownload = false;
     document.getElementById('result').classList.remove('visible');
     document.getElementById('errorBox').classList.remove('visible');
     document.getElementById('doneCard').classList.remove('visible');
