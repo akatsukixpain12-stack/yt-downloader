@@ -266,16 +266,10 @@
 <footer><p>YTSave · Powered by <span>yt-dlp</span> · 1800+ platforms supported</p></footer>
 
 <script>
-  const UPI_ID = '7407589434@fam';
-  const PAYEE = 'Manjiro';
-  let donateAmt = 0;
+  const DONATE_URL = 'https://urpy.link/eX97VD';
 
   function openDonate() {
-    donateAmt = 0;
-    document.getElementById('amtInput').value = '';
-    document.querySelectorAll('.amt-btn').forEach(b => b.classList.remove('active'));
-    show('stepAmount'); hide('stepPay'); hide('stepThanks');
-    document.getElementById('donateModal').style.display = 'flex';
+    window.open(DONATE_URL, '_blank', 'noopener,noreferrer');
   }
 
   function closeModal() {
