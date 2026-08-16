@@ -98,14 +98,24 @@ def make_format_string(height):
     return 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
 
 
-def base_opts(download_id):
-    return {
-        'progress_hooks': [get_progress_hook(download_id)],
-        'postprocessor_hooks': [get_postprocessor_hook(download_id)],
+def base_opts(download_id=None):
+    opts = {
+        'progress_hooks': [get_progress_hook(download_id)] if download_id else [],
+        'postprocessor_hooks': [get_postprocessor_hook(download_id)] if download_id else [],
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
     }
+
+    yt_args = {}
+    for env, key in [('YTSAVE_YT_PLAYER_CLIENT', 'player_client'), ('YTSAVE_YT_PO_TOKEN', 'po_token'),
+                     ('YTSAVE_YT_PLAYER_SKIP', 'player_skip'), ('YTSAVE_YT_TAB_SKIP', 'tab_skip')]:
+        if os.environ.get(env): yt_args[key] = os.environ.get(env).split(',')
+    if os.environ.get('YTSAVE_YT_VISITOR_DATA'):
+        yt_args['visitor_data'] = [os.environ.get('YTSAVE_YT_VISITOR_DATA')]
+
+    if yt_args: opts['extractor_args'] = {'youtube': yt_args}
+    return opts
 
 
 def find_output_file(download_id, ext):
@@ -146,10 +156,9 @@ def get_info():
         return jsonify({'error': 'No URL provided'}), 400
 
     try:
-        with yt_dlp.YoutubeDL({
-            'quiet': True, 'no_warnings': True,
-            'skip_download': True, 'noplaylist': True,
-        }) as ydl:
+        ydl_opts = base_opts()
+        ydl_opts.update({'skip_download': True})
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
         all_formats = info.get('formats', [])
