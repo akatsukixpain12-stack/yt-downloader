@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ["python312", "ffmpeg"]
+nixPkgs = ["python312", "ffmpeg", "deno"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
 
 [start]
-cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --timeout 300"
+cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0"
