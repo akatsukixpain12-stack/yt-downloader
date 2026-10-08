@@ -83,19 +83,27 @@ def get_postprocessor_hook(download_id):
 
 
 def make_format_string(height):
-    """Height-based format string with multiple fallbacks — never fails."""
-    if height and int(height) > 0:
-        h = int(height)
+    """Select the best video/audio pair up to the requested height.
+
+    1440p/2160p videos are commonly separate DASH video/audio streams,
+    so the selector must not require a pre-merged MP4.
+    """
+    try:
+        h = int(height or 0)
+    except (TypeError, ValueError):
+        h = 0
+
+    if h > 0:
         return (
-            f'bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/'
-            f'bestvideo[height<={h}][ext=mp4]+bestaudio/'
-            f'bestvideo[height<={h}]+bestaudio[ext=m4a]/'
-            f'bestvideo[height<={h}]+bestaudio/'
-            f'best[height<={h}]/'
-            f'bestvideo+bestaudio/'
-            f'best'
+            f'bestvideo[height<=?{h}][ext=mp4]+bestaudio[ext=m4a]/'
+            f'bestvideo[height<=?{h}][ext=mp4]+bestaudio/'
+            f'bestvideo[height<=?{h}]+bestaudio[ext=m4a]/'
+            f'bestvideo[height<=?{h}]+bestaudio/'
+            f'best[height<=?{h}]/'
+            f'bestvideo+bestaudio/best'
         )
-    return 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+
+    return 'bestvideo+bestaudio/best'
 
 
 def base_opts(download_id):
@@ -105,6 +113,16 @@ def base_opts(download_id):
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
+        'retries': 10,
+        'fragment_retries': 10,
+        'file_access_retries': 5,
+        'extractor_retries': 3,
+        'socket_timeout': 30,
+        'continuedl': True,
+        'overwrites': True,
+        # Full YouTube support needs yt-dlp's EJS challenge solver + Deno.
+        'js_runtimes': {'deno': {}},
+        'remote_components': {'ejs': ['github']},
     }
 
 
@@ -147,8 +165,15 @@ def get_info():
 
     try:
         with yt_dlp.YoutubeDL({
-            'quiet': True, 'no_warnings': True,
-            'skip_download': True, 'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+            'noplaylist': True,
+            'retries': 5,
+            'extractor_retries': 3,
+            'socket_timeout': 30,
+            'js_runtimes': {'deno': {}},
+            'remote_components': {'ejs': ['github']},
         }) as ydl:
             info = ydl.extract_info(url, download=False)
 
@@ -211,8 +236,11 @@ def get_info():
 def download():
     data = request.get_json()
     url = (data.get('url') or '').strip()
-    height = data.get('height', 0)
-    ext = data.get('ext', 'mp4')
+    try:
+        height = int(data.get('height', 0) or 0)
+    except (TypeError, ValueError):
+        height = 0
+    ext = (data.get('ext') or 'mp4').lower()
     quality = data.get('quality', '')
     download_id = str(uuid.uuid4())
 
@@ -245,8 +273,9 @@ def download():
         ydl_opts = {
             'format': make_format_string(height),
             'outtmpl': outtmpl,
-            'merge_output_format': 'mp4',
-            'postprocessor_args': {'ffmpeg': ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']},
+            # Prefer MP4 where possible; genuine 4K VP9/AV1 may be muxed as MKV
+            # instead of forcing an incompatible MP4 stream combination.
+            'merge_output_format': 'mp4/mkv',
             **opts
         }
 
@@ -295,7 +324,13 @@ def serve_file(download_id):
     filename = d.get('filename', os.path.basename(filepath))
     filename = "".join(c for c in filename if c not in r'\/:*?"<>|').strip() or f'download.{d.get("ext","mp4")}'
 
-    mime_map = {'.mp4':'video/mp4','.mp3':'audio/mpeg','.m4a':'audio/mp4','.webm':'video/webm'}
+    mime_map = {
+        '.mp4': 'video/mp4',
+        '.mkv': 'video/x-matroska',
+        '.mp3': 'audio/mpeg',
+        '.m4a': 'audio/mp4',
+        '.webm': 'video/webm',
+    }
     mimetype = mime_map.get(os.path.splitext(filepath)[1].lower(), 'application/octet-stream')
 
     @after_this_request
