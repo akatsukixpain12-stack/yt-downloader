@@ -8,3 +8,6 @@ downloads_temp/
 *.m4a
 *.webm
 *.mkv
+cookies.txt
+*.part
+*.ytdl
