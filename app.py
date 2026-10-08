@@ -173,7 +173,7 @@ def get_info():
             'extractor_retries': 3,
             'socket_timeout': 30,
             'js_runtimes': {'deno': {}},
-            'remote_components': {'ejs': ['github']},
+            'remote_components': {'ejs:github'},
         }) as ydl:
             info = ydl.extract_info(url, download=False)
 
