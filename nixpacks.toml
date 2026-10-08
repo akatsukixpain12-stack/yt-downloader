@@ -1,8 +1,12 @@
 [phases.setup]
-nixPkgs = ["python312", "ffmpeg", "deno"]
+nixPkgs = ["python312", "ffmpeg", "deno", "git"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = [
+  "pip install -r requirements.txt",
+  "git clone --depth 1 --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /opt/bgutil-ytdlp-pot-provider",
+  "cd /opt/bgutil-ytdlp-pot-provider/server && deno install --allow-scripts=npm:canvas --frozen"
+]
 
 [start]
-cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0"
+cmd = "./start.sh"
