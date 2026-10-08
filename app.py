@@ -122,7 +122,7 @@ def base_opts(download_id):
         'overwrites': True,
         # Full YouTube support needs yt-dlp's EJS challenge solver + Deno.
         'js_runtimes': {'deno': {}},
-        'remote_components': {'ejs': ['github']},
+        'remote_components': {'ejs:github'},
     }
 
 
