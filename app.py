@@ -3,6 +3,8 @@ import os
 import tempfile
 import threading
 import uuid
+from urllib.error import URLError
+from urllib.request import urlopen
 
 from flask import Flask, after_this_request, jsonify, request, send_file, send_from_directory
 import yt_dlp
@@ -158,7 +160,19 @@ def index():
 
 @app.route('/healthz')
 def healthz():
-    return jsonify({'ok': True})
+    """Report real readiness, including the PO-token service used by YouTube."""
+    try:
+        with urlopen('http://127.0.0.1:4416/ping', timeout=2) as response:
+            provider_ok = 200 <= response.status < 300
+    except (URLError, TimeoutError, OSError):
+        provider_ok = False
+
+    payload = {
+        'ok': provider_ok,
+        'service': 'ytsave',
+        'po_token_provider': 'ready' if provider_ok else 'unavailable',
+    }
+    return jsonify(payload), (200 if provider_ok else 503)
 
 
 @app.route('/info', methods=['POST'])
