@@ -123,7 +123,11 @@ def base_opts(download_id):
         # Full YouTube support needs yt-dlp's EJS challenge solver + Deno.
         'js_runtimes': {'deno': {}},
         'remote_components': {'ejs:github'},
-        'extractor_args': {'youtubepot-bgutilhttp': {'base_url': ['http://127.0.0.1:4416']}},
+        # Prefer mweb with a PO token; keep web as a fallback for video/IP-specific availability.
+        'extractor_args': {
+            'youtube': {'player_client': ['mweb', 'web']},
+            'youtubepot-bgutilhttp': {'base_url': ['http://127.0.0.1:4416']},
+        },
     }
 
 
@@ -175,7 +179,11 @@ def get_info():
             'socket_timeout': 30,
             'js_runtimes': {'deno': {}},
             'remote_components': {'ejs:github'},
-            'extractor_args': {'youtubepot-bgutilhttp': {'base_url': ['http://127.0.0.1:4416']}},
+            # Prefer mweb with a PO token; keep web as a fallback for video/IP-specific availability.
+            'extractor_args': {
+                'youtube': {'player_client': ['mweb', 'web']},
+                'youtubepot-bgutilhttp': {'base_url': ['http://127.0.0.1:4416']},
+            },
         }) as ydl:
             info = ydl.extract_info(url, download=False)
 
