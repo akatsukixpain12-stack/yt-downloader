@@ -125,7 +125,7 @@ def base_opts(download_id):
         'remote_components': {'ejs:github'},
         # Prefer mweb with a PO token; keep web as a fallback for video/IP-specific availability.
         'extractor_args': {
-            'youtube': {'player_client': ['mweb', 'web']},
+            'youtube': {'player_client': ['mweb', 'android_vr', 'tv', 'web_embedded']},
             'youtubepot-bgutilhttp': {'base_url': ['http://127.0.0.1:4416']},
         },
     }
@@ -181,7 +181,7 @@ def get_info():
             'remote_components': {'ejs:github'},
             # Prefer mweb with a PO token; keep web as a fallback for video/IP-specific availability.
             'extractor_args': {
-                'youtube': {'player_client': ['mweb', 'web']},
+                'youtube': {'player_client': ['mweb', 'android_vr', 'tv', 'web_embedded']},
                 'youtubepot-bgutilhttp': {'base_url': ['http://127.0.0.1:4416']},
             },
         }) as ydl:
